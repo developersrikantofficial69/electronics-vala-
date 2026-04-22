@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Dashboard — ELECTRONICS VALA</title>
+  <meta name="description" content="User dashboard — view your assigned tasks, deadlines, and progress overview." />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/main.css" />
+
+</head>
+<body>
+  <div class="page-loader" id="page-loader"><div class="loader-logo" style="width:48px;height:48px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:26px;height:26px"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div><div class="spinner"></div></div>
+
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <header class="app-header" id="app-header"></header>
+    <main class="main-content">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title" id="welcome-msg">Welcome back! 👋</h1>
+          <p class="page-subtitle">Here's your current task overview</p>
+        </div>
+        <a href="../shared/calendar.html" class="btn btn-secondary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          View Calendar
+        </a>
+      </div>
+
+      <!-- My Stats -->
+      <div class="stats-grid" id="my-stats">
+        <div class="stat-card"><div style="height:70px;display:flex;align-items:center;justify-content:center"><div class="spinner"></div></div></div>
+        <div class="stat-card"><div style="height:70px;display:flex;align-items:center;justify-content:center"><div class="spinner"></div></div></div>
+        <div class="stat-card"><div style="height:70px;display:flex;align-items:center;justify-content:center"><div class="spinner"></div></div></div>
+        <div class="stat-card"><div style="height:70px;display:flex;align-items:center;justify-content:center"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Two column: Upcoming deadlines + Recent tasks -->
+      <div class="grid-2" style="margin-bottom:1.25rem">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">⏰ Upcoming Deadlines</div>
+            <a href="./tasks.html" class="btn btn-ghost btn-sm">View all →</a>
+          </div>
+          <div id="upcoming-list"><div style="text-align:center;padding:2rem"><div class="spinner"></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 My Task Progress</div>
+          </div>
+          <div id="my-progress"><div style="text-align:center;padding:2rem"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Recent tasks list -->
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Recent Tasks</div><div class="card-subtitle">Your latest assigned work</div></div>
+          <a href="./tasks.html" class="btn btn-secondary btn-sm">All Tasks</a>
+        </div>
+        <div id="recent-tasks"><div style="text-align:center;padding:2rem"><div class="spinner"></div></div></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="../assets/js/firebase-config.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/tasks.js"></script>
+  <script src="../assets/js/notifications.js"></script>
+
+  <script>
+    let profile = null;
+
+    async function init() {
+      profile = await requireAuth('user');
+      document.getElementById('sidebar').innerHTML = buildSidebar('user', 'dashboard');
+      document.getElementById('app-header').innerHTML = buildHeader('Dashboard');
+      initDropdowns(); initMobileSidebar();
+      populateUserUI(profile);
+      document.getElementById('welcome-msg').textContent = `Welcome back, ${profile.name?.split(' ')[0] || 'there'}! 👋`;
+      NotifService.listen(profile.uid, n => NotifService.renderDropdown(profile.uid, n));
+      NotifService.checkDeadlines(profile.uid);
+      loadDashboard();
+    }
+
+    async function loadDashboard() {
+      const stats = await TasksService.getStats(profile.uid);
+      const tasks = await TasksService.getForUser(profile.uid);
+      renderStats(stats);
+      renderUpcomingDeadlines(tasks);
+      renderProgress(stats);
+      renderRecentTasks(tasks);
+    }
+
+    function renderStats(stats) {
+      const rate = stats.total > 0 ? Math.round((stats.completed/stats.total)*100) : 0;
+      document.getElementById('my-stats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(99,102,241,0.12);color:var(--accent)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+          <div class="stat-label">Total Assigned</div><div class="stat-value">${stats.total}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(59,130,246,0.12);color:#3b82f6"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+          <div class="stat-label">In Progress</div><div class="stat-value" style="color:var(--status-progress)">${stats.inProgress}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(245,158,11,0.12);color:var(--prio-medium)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="stat-label">Submitted</div><div class="stat-value" style="color:var(--status-submitted)">${stats.submitted + stats.underReview}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(16,185,129,0.12);color:var(--status-completed)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="stat-label">Completed</div><div class="stat-value" style="color:var(--status-completed)">${stats.completed}</div>
+          <div class="stat-change ${rate >= 70 ? 'positive' : ''}">${rate}% completion rate</div>
+        </div>
+      `;
+    }
+
+    function renderUpcomingDeadlines(tasks) {
+      const now = new Date();
+      const upcoming = tasks
+        .filter(t => t.deadline && t.status !== TASK_STATUS.COMPLETED)
+        .map(t => ({ ...t, _deadline: t.deadline.toDate ? t.deadline.toDate() : new Date(t.deadline) }))
+        .filter(t => t._deadline >= now)
+        .sort((a,b) => a._deadline - b._deadline)
+        .slice(0, 5);
+
+      const el = document.getElementById('upcoming-list');
+      if (!upcoming.length) { el.innerHTML = `<div class="empty-state" style="padding:1.5rem"><p>🎉 No upcoming deadlines</p></div>`; return; }
+      el.innerHTML = upcoming.map(t => {
+        const diff = Math.ceil((t._deadline - now) / 86400000);
+        const urgency = diff <= 1 ? 'deadline-overdue' : diff <= 3 ? 'deadline-soon' : 'deadline-ok';
+        return `
+          <div class="activity-item" style="cursor:pointer" onclick="window.location.href='./tasks.html'">
+            <div class="activity-dot" style="background:${diff<=1?'var(--prio-high)':diff<=3?'var(--prio-medium)':'var(--status-completed)'}"></div>
+            <div style="flex:1">
+              <div style="font-size:0.83rem;font-weight:600;color:var(--text-primary)">${truncate(t.title,35)}</div>
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-top:3px">
+                ${statusBadge(t.status)}
+                <span class="deadline-badge ${urgency}">${diff === 0 ? 'Due today!' : diff === 1 ? 'Due tomorrow' : `${diff} days left`}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderProgress(stats) {
+      const items = [
+        { label:'Pending',      val: stats.pending,    color:'var(--status-pending)' },
+        { label:'In Progress',  val: stats.inProgress, color:'var(--status-progress)' },
+        { label:'Submitted',    val: stats.submitted,  color:'var(--status-submitted)' },
+        { label:'Under Review', val: stats.underReview,color:'var(--status-review)' },
+        { label:'Completed',    val: stats.completed,  color:'var(--status-completed)' },
+      ].filter(i => i.val > 0);
+      const el = document.getElementById('my-progress');
+      if (stats.total === 0) { el.innerHTML = `<div class="empty-state" style="padding:1.5rem"><p>No tasks assigned yet</p></div>`; return; }
+      el.innerHTML = items.map(i => {
+        const pct = Math.round((i.val / stats.total) * 100);
+        return `
+          <div style="margin-bottom:0.85rem">
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:4px">
+              <span style="color:var(--text-secondary)">${i.label}</span>
+              <span style="font-weight:700;color:var(--text-primary)">${i.val} <span style="color:var(--text-muted)">(${pct}%)</span></span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${i.color}"></div></div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderRecentTasks(tasks) {
+      const el = document.getElementById('recent-tasks');
+      const recent = tasks.slice(0,6);
+      if (!recent.length) { el.innerHTML = `<div class="empty-state" style="padding:1.5rem"><p>No tasks assigned to you yet.</p></div>`; return; }
+      el.innerHTML = `
+        <div class="table-wrapper">
+          <table class="table">
+            <thead><tr><th>Task</th><th>Priority</th><th>Deadline</th><th>Status</th></tr></thead>
+            <tbody>
+              ${recent.map(t => `
+                <tr style="cursor:pointer" onclick="window.location.href='./tasks.html'">
+                  <td class="td-primary">${truncate(t.title,40)}</td>
+                  <td>${priorityBadge(t.priority)}</td>
+                  <td>${formatDate(t.deadline)} ${deadlineBadge(t.deadline)}</td>
+                  <td>${statusBadge(t.status)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    init();
+  </script>
+</body>
+</html>
